@@ -1,0 +1,25 @@
+=head1 NAME
+
+Tree::AA - a simple, purely functional, balanced tree
+
+=head1 SYNOPSIS
+
+    my $tree = Tree::AA->new(
+        cmp => sub { $_[0] <=> $_[1] }, # the default
+    );
+    $tree = $tree->insert( 5 => 'five' );
+    $tree = $tree->insert( 10 => 'ten' );
+
+    $tree = $tree->delete( 5 );
+
+=head1 NOTES
+
+Full descriptions of the algorithm are at
+L<http://en.wikipedia.org/wiki/AA_tree>
+and L<http://www.eternallyconfuzzled.com/tuts/datastructures/jsw_tut_andersson.aspx>
+
+The latter especially was useful for details of the deletion implementation.
+
+
+=cut
+
