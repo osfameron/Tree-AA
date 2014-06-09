@@ -7,18 +7,18 @@ use Test::More;
 use Test::Exception;
 
 sub create {
-    my $tree = Tree::AA->fromListWith( sub { $_[0] <=> $_[1] }, map [$_], @_ );
+    my $tree = Tree::AA->fromList(map { [$_=>$_] } @_);
     ok $tree->debug_check_invariants, 'invariants ok';
-    is_deeply [ $tree->keys ], [ sort { $a <=> $b } @_ ];
+    is_deeply [ $tree->keys ], [ sort @_ ];
     return $tree;
 }
 
 subtest 'check invariants after addition ASC' => sub {
-    create(1..16);
+    create('a'..'z');
 };
 
 subtest 'check invariants after addition DESC' => sub {
-    create(reverse 1..16);
+    create(reverse 'a'..'z');
 };
 
 sub check_delete {
@@ -33,44 +33,37 @@ sub check_delete {
                 last;
             }
     }
-    ok ! $tree->root->level, 'Tree fully deleted';
+    ok ! $tree->level, 'Tree fully deleted';
 }
 
 subtest 'pairs' => sub {
-    my $tree = create(1..4);
-    is_deeply [ $tree->pairs ], [[1,undef], [2,undef], [3,undef], [4,undef ]];
+    my $tree = create('a'..'d');
+    is_deeply [ $tree->pairs ], [[qw/a a/], [qw/b b/], [qw/c c/], [qw/d d/]];
 };
 
 subtest 'Check deletions' => sub {
-    check_delete(1);
-    check_delete(1..2);
-    check_delete(1..3);
-    check_delete(1..4);
-    check_delete(1..5);
-    check_delete(1..16);
-    check_delete(reverse 1..16);
+    check_delete('a');
+    check_delete('a'..'b');
+    check_delete('a'..'c');
+    check_delete('a'..'d');
+    check_delete('a'..'z');
+    check_delete(reverse 'a'..'z');
 };
 
 subtest 'fmap' => sub {
-    my $tree = Tree::AA->new( cmp => sub { $_[0] <=> $_[1] } );
-    for (1..3) {
-        $tree = $tree->insert($_, $_);
-    }
-    is_deeply [ $tree->pairs ], [[1,1], [2,2], [3,3]];
+    my $tree = create('a'..'c');
+    is_deeply [ $tree->pairs ], [[qw/a a/], [qw/b b/], [qw/c c/]];
 
-    $tree = $tree->fmap( sub { $_[0] * 2 } );
+    $tree = $tree->fmap( sub { uc $_[1] } );
 
-    is_deeply [ $tree->pairs ], [[1,2], [2,4], [3,6]];
+    is_deeply [ $tree->pairs ], [[qw/a A/], [qw/b B/], [qw/c C/]];
 };
 
 subtest 'filter' => sub {
-    my $tree = Tree::AA->new( cmp => sub { $_[0] <=> $_[1] } );
-    for (1..10) {
-        $tree = $tree->insert($_, $_ * 2);
-    }
+    my $tree = create('a'..'z');
 
-    $tree = $tree->filter( sub { $_[0] % 3 and $_[1] % 5 } );
-    is_deeply [ $tree->pairs ], [[1,2], [2,4], [4,8], [7,14], [8,16]];
+    $tree = $tree->filter( sub { $_[0] =~/[aeiou]/ } );
+    is_deeply [ $tree->pairs ], [[qw/a a/], [qw/e e/], [qw/i i/], [qw/o o/], [qw/u u/]];
 };
 
 subtest 'insert with' => sub {
@@ -88,8 +81,10 @@ subtest 'insert with' => sub {
 };
 
 subtest 'fromSortedList' => sub {
-    for my $size (0..16) {
-        my $tree = Tree::AA->fromSortedListWith( sub { $_[0] <=> $_[1] }, map [$_], 0..$size );
+    for my $size (0..26) {
+        my @list = ('a'..'z');
+
+        my $tree = Tree::AA->fromSortedList( map { [ $_=>$_ ] } @list[0..($size-1)] );
         ok $tree->debug_check_invariants, 'invariants ok';
     }
 };

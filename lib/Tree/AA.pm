@@ -4,9 +4,11 @@ Tree::AA - a simple, purely functional, balanced tree
 
 =head1 SYNOPSIS
 
-    my $tree = Tree::AA->new(
-        cmp => sub { $_[0] <=> $_[1] }, # the default
-    );
+    my $tree = Tree::AA->new(); # string keys
+
+    my $IntMap = Tree::AA->cmp( $_[0] <=> $_[1] ); # numeric keys
+    my $tree = $IntMap->new;
+
     $tree = $tree->insert( 5 => 'five' );
     $tree = $tree->insert( 10 => 'ten' );
 
@@ -22,104 +24,80 @@ The latter especially was useful for details of the deletion implementation.
 
 =cut
 
-use Tree::AA::Node;
-use Tree::AA::Node::NonEmpty;
-
 package Tree::AA;
 use Moo;
-with 'MooX::Role::But';
-use Types::Standard qw( InstanceOf CodeRef );
 
-has root => (
-    is => 'lazy',
-    isa => InstanceOf['Tree::AA::Node'],
-    default => sub { Tree::AA::Node->new },
-);
+sub level { 0 }
+sub value { die }
 
-has cmp => (
-    is => 'lazy',
-    default => sub { sub { $_[0] cmp $_[1] } },
-    isa => CodeRef,
-);
+sub cmp { $_[0] cmp $_[1] }
+
+use constant NIL => Tree::AA->new;
+
+sub new_node {
+    my $class = shift;
+    require Tree::AA::Node;
+    Tree::AA::Node->new(@_);
+}
 
 sub insert {
     my ($self, $key, $value, $merge_fn) = @_;
-    return $self->but(
-        root => $self->root->insert($self->cmp, $key, $value, $merge_fn)
-    );
+    return $self->new_node(key => $key, value => $value);
 }
 
-sub delete {
-    my ($self, $key) = @_;
-    return $self->but(
-        root => $self->root->delete($self->cmp, $key)
-    );
-}
+# simplest algorithm is by defining most methods to just return self
+sub but { $_[0] }
+sub delete { $_[0] }
+sub fmap { $_[0] }
+sub filter { $_[0] }
 
-sub keys {
+sub keys {}
+sub values {}
+sub pairs {}
+
+sub left { $_[0] }
+sub right { $_[0] }
+
+sub skew { $_[0] }
+sub split { $_[0] }
+
+sub debug_tree { '' }
+sub debug { '()' }
+sub _debug_check_invariants { }
+
+sub debug_check_invariants {
     my $self = shift;
-    return $self->root->keys;
-}
-
-sub values {
-    my $self = shift;
-    return $self->root->pairs;
-}
-
-sub pairs {
-    my $self = shift;
-    return $self->root->pairs;
-}
-
-sub fmap {
-    my ($self, $fn) = @_;
-    return $self->root->fmap($fn);
-}
-
-sub filter {
-    my ($self, $fn) = @_;
-    return $self->root->filter($fn, $self->cmp);
-}
-
-sub fromList {
-    my $class = shift;
-    return $class->fromListWith(undef, @_);
-}
-
-sub fromListWith {
-    my $class = shift;
-    my $cmp = shift;
-    my $tree = $class->new( $cmp ? ( cmp => $cmp ) : () );
-    for my $pair (@_) {
-        $tree = $tree->insert(@$pair); # key => value
+    eval {
+        $self->_debug_check_invariants;
+    };
+    if ($@) {
+        Test::More::diag ($@ . "\n" . $self->debug_tree);
+        return 0;
     }
-    return $tree;
+    return 1;
+}
+
+sub fromList{
+    my $class = shift;
+    my $root = $class->new;
+    for my $pair (@_) {
+        $root = $root->insert(@$pair); # key => value
+    }
+    return $root;
 }
 
 sub fromSortedList {
     my $class = shift;
-    return $class->fromSortedListWith(undef, @_);
+    my $root = $class->_fromSortedList(\@_, 0, scalar @_);
 }
 
-sub fromSortedListWith {
-    my $class = shift;
-    my $cmp = shift; # but we ignore, as we assume that the list is sorted already
-    my $root = $class->_fromSortedListWith(\@_, 0, scalar @_);
-    return $class->new(
-        root => $root,
-        $cmp ? ( cmp => $cmp ) : (),
-    );
-}
-
-my $NIL = Tree::AA::Node->new; # TODO, refactor with ::Node::NonEmpty
-
-sub _fromSortedListWith {
+sub _fromSortedList{
     my ($class, $array, $from, $to) = @_;
-    my $len = $to - $from or return $NIL;
-    die "RARR $from - $to reversed" if $len < 0;
+    my $len = $to - $from or return $class->NIL;
+    die "Unexpected $from - $to reversed" if $len < 0;
     if ($len == 1) {
         my $item = $array->[$from];
-        return Tree::AA::Node::NonEmpty->new( 
+        return $class->new_node( 
             key => $item->[0],
             value => $item->[1]
         );
@@ -127,10 +105,10 @@ sub _fromSortedListWith {
     if ($len == 2) {
         my $item = $array->[$from];
         my $next = $array->[$from+1];
-        return Tree::AA::Node::NonEmpty->new( 
+        return $class->new_node( 
             key => $item->[0],
             value => $item->[1],
-            right => Tree::AA::Node::NonEmpty->new(
+            right => $class->new_node(
                 key => $next->[0],
                 value => $next->[1],
             ),
@@ -138,33 +116,17 @@ sub _fromSortedListWith {
     }
     my $pivot = int(($len-1) / 2); # 3-1/2=1, e.g. 2nd elem; 4-1/2=1, e.g. 2nd elem, so more elems on right hand side
 
-    my $left  = $class->_fromSortedListWith($array, $from, $from + $pivot);
-    my $right = $class->_fromSortedListWith($array, $from + $pivot+1, $to);
+    my $left  = $class->_fromSortedList($array, $from, $from + $pivot);
+    my $right = $class->_fromSortedList($array, $from + $pivot+1, $to);
 
     my $item = $array->[$from + $pivot];
-    return Tree::AA::Node::NonEmpty->new( 
+    return $class->new_node( 
         key => $item->[0],
         value => $item->[1],
         level => $left->level + 1,
         left => $left,
         right => $right,
     );
-}
-
-sub debug_tree {
-    my $self = shift;
-    "--------\n" . $self->root->debug_tree;
-}
-sub debug_check_invariants {
-    my $self = shift;
-    eval {
-        $self->root->debug_check_invariants;
-    };
-    if ($@) {
-        Test::More::diag ($@ . "\n" . $self->debug_tree);
-        return 0;
-    }
-    return 1;
 }
 
 1;
