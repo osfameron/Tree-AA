@@ -6,7 +6,7 @@ Tree::AA - a simple, purely functional, balanced tree
 
     my $tree = Tree::AA->new(); # string keys
 
-    my $IntMap = Tree::AA->cmp( $_[0] <=> $_[1] ); # numeric keys
+    my $IntMap = Tree::AA->with_cmp( $_[0] <=> $_[1] ); # numeric keys
     my $tree = $IntMap->new;
 
     $tree = $tree->insert( 5 => 'five' );
@@ -127,6 +127,42 @@ sub _fromSortedList{
         left => $left,
         right => $right,
     );
+}
+
+# TODO, refactor to Package::Variant?
+my $counter = 'A000';
+sub with_cmp {
+    my ($NIL_class, $cmp_ref) = @_;
+
+    die "Call with_cmp on base class, not node class" if $NIL_class =~ /::Node/;
+
+    my $node_class = "${NIL_class}::Node";
+    eval "require $node_class" or die "Couldn't require $node_class: $!";
+
+    $counter++;
+
+    my $new_NIL_class = "${NIL_class}::${counter}";
+    my $new_node_class = "${new_NIL_class}::Node";
+
+    no strict 'refs';
+    @{"${new_NIL_class}::ISA"} = ($NIL_class);
+    @{"${new_node_class}::ISA"} = ($node_class, $new_NIL_class);
+
+    my $NIL = $new_NIL_class->new;
+
+    *{"${new_NIL_class}::cmp"} =
+    *{"${new_node_class}::cmp"} = $cmp_ref;
+
+    *{"${new_NIL_class}::NIL"} =
+    *{"${new_node_class}::NIL"} = sub () { $NIL };
+
+    *{"${new_NIL_class}::new_node"} =
+    *{"${new_node_class}::new_node"} = sub {
+        shift;
+        $new_node_class->new(@_);
+    };
+
+    return $new_NIL_class;
 }
 
 1;
